@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>YouTube Crossfader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1rem 2rem; background: #111; color: #eee; }
+    h1 { font-size: 1.25rem; }
+    #decks { display: flex; gap: 1rem; }
+    .deck { flex: 1; min-width: 0; }
+    .deck form { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .deck input { flex: 1; min-width: 0; padding: 0.4rem; }
+    .player { aspect-ratio: 16 / 9; background: #000; }
+    .player iframe { width: 100%; height: 100%; }
+    .toggle { margin-top: 0.5rem; padding: 0.4rem 1rem; }
+    .error { color: #f66; min-height: 1.2em; margin: 0.25rem 0 0; }
+  </style>
+</head>
+<body>
+  <h1>YouTube Crossfader</h1>
+  <div id="decks">
+    <section class="deck" id="deck-a">
+      <form>
+        <input type="text" placeholder="Paste YouTube URL or video ID" aria-label="Deck A video URL">
+        <button type="submit">Load</button>
+      </form>
+      <p class="error" role="alert"></p>
+      <div class="player"><div></div></div>
+      <button type="button" class="toggle" disabled>Play</button>
+    </section>
+    <section class="deck" id="deck-b">
+      <form>
+        <input type="text" placeholder="Paste YouTube URL or video ID" aria-label="Deck B video URL">
+        <button type="submit">Load</button>
+      </form>
+      <p class="error" role="alert"></p>
+      <div class="player"><div></div></div>
+      <button type="button" class="toggle" disabled>Play</button>
+    </section>
+  </div>
+
+  <script type="module">
+    import { parseVideoId } from "./src/youtube.js";
+
+    function setupDeck(root) {
+      const form = root.querySelector("form");
+      const input = root.querySelector("input");
+      const error = root.querySelector(".error");
+      const toggle = root.querySelector(".toggle");
+      const target = root.querySelector(".player > div");
+      let player = null;
+      let ready = false;
+
+      function createPlayer(videoId) {
+        player = new YT.Player(target, {
+          width: "100%",
+          height: "100%",
+          videoId,
+          playerVars: { playsinline: 1 },
+          events: {
+            onReady: () => { ready = true; toggle.disabled = false; },
+            onStateChange: (e) => {
+              toggle.textContent = e.data === YT.PlayerState.PLAYING ? "Pause" : "Play";
+            },
+          },
+        });
+      }
+
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const id = parseVideoId(input.value);
+        if (!id) {
+          error.textContent = "Not a recognised YouTube URL or video ID.";
+          return;
+        }
+        error.textContent = "";
+        if (!player) createPlayer(id);
+        else player.loadVideoById(id);
+      });
+
+      toggle.addEventListener("click", () => {
+        if (!ready) return;
+        if (player.getPlayerState() === YT.PlayerState.PLAYING) player.pauseVideo();
+        else player.playVideo();
+      });
+    }
+
+    // The IFrame API calls this global once it has loaded.
+    window.onYouTubeIframeAPIReady = () => {
+      document.querySelectorAll(".deck").forEach(setupDeck);
+    };
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+  </script>
+</body>
+</html>
