@@ -1,0 +1,12 @@
+[workspace]
+name = "youtube-crossfader"
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "linux-aarch64"]
+
+[dependencies]
+nodejs = "*"
+python = "*"
+
+[tasks]
+serve = "python -m http.server 8000 --bind 0.0.0.0"
+test = "node --test"
