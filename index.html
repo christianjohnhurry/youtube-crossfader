@@ -14,6 +14,10 @@
     .player { aspect-ratio: 16 / 9; background: #000; }
     .player iframe { width: 100%; height: 100%; }
     .toggle { margin-top: 0.5rem; padding: 0.4rem 1rem; }
+    #mixer { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 2rem; margin-top: 1.5rem; }
+    #mixer label { display: flex; align-items: center; gap: 0.5rem; }
+    #mixer .fader { flex: 1 1 24rem; }
+    #crossfader { flex: 1; min-width: 12rem; }
     .error { color: #f66; min-height: 1.2em; margin: 0.25rem 0 0; }
   </style>
 </head>
@@ -40,10 +44,51 @@
     </section>
   </div>
 
+  <div id="mixer">
+    <label class="fader">A
+      <input type="range" id="crossfader" min="0" max="100" step="1" value="50" aria-label="Crossfader">
+      B
+    </label>
+    <label>Curve
+      <select id="curve">
+        <option value="linear">Linear</option>
+        <option value="equal-power">Equal power</option>
+      </select>
+    </label>
+    <label>Master
+      <input type="range" id="master" min="0" max="100" step="1" value="100" aria-label="Master volume">
+    </label>
+  </div>
+
   <script type="module">
     import { parseVideoId } from "./src/youtube.js";
+    import { deckVolumes, nudgePosition } from "./src/mixer.js";
 
-    function setupDeck(root) {
+    const KEY_STEP = 0.05;
+    const crossfader = document.getElementById("crossfader");
+    const curveSelect = document.getElementById("curve");
+    const master = document.getElementById("master");
+    const decks = {};
+
+    function applyVolumes() {
+      const v = deckVolumes(Number(crossfader.value) / 100, curveSelect.value, Number(master.value));
+      for (const [key, deck] of Object.entries(decks)) deck.setVolume(v[key]);
+    }
+    for (const el of [crossfader, curveSelect, master]) el.addEventListener("input", applyVolumes);
+
+    // Arrow keys move the fader from anywhere on the page, except where they
+    // already mean something (text entry, the sliders and select themselves).
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.target.closest("input, select, textarea")) return;
+      e.preventDefault();
+      const pos = nudgePosition(Number(crossfader.value) / 100, e.key === "ArrowLeft" ? -KEY_STEP : KEY_STEP);
+      crossfader.value = Math.round(pos * 100);
+      applyVolumes();
+    });
+
+    function setupDeck(root, key) {
       const form = root.querySelector("form");
       const input = root.querySelector("input");
       const error = root.querySelector(".error");
@@ -59,7 +104,7 @@
           videoId,
           playerVars: { playsinline: 1 },
           events: {
-            onReady: () => { ready = true; toggle.disabled = false; },
+            onReady: () => { ready = true; toggle.disabled = false; applyVolumes(); },
             onStateChange: (e) => {
               toggle.textContent = e.data === YT.PlayerState.PLAYING ? "Pause" : "Play";
             },
@@ -79,6 +124,8 @@
         else player.loadVideoById(id);
       });
 
+      decks[key] = { setVolume: (v) => { if (ready) player.setVolume(v); } };
+
       toggle.addEventListener("click", () => {
         if (!ready) return;
         if (player.getPlayerState() === YT.PlayerState.PLAYING) player.pauseVideo();
@@ -88,7 +135,7 @@
 
     // The IFrame API calls this global once it has loaded.
     window.onYouTubeIframeAPIReady = () => {
-      document.querySelectorAll(".deck").forEach(setupDeck);
+      document.querySelectorAll(".deck").forEach((root) => setupDeck(root, root.id === "deck-a" ? "a" : "b"));
     };
     const tag = document.createElement("script");
     tag.src = "https://www.youtube.com/iframe_api";
